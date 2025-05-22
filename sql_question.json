@@ -1,0 +1,358 @@
+[
+    {
+        "question": "巡检计划的已巡检设备数量",
+        "sql": "SELECT \tp_check_plan.plan_id AS \"巡检计划ID\", \tp_check_plan.plan_name AS \"巡检计划名称\", \tCOUNT ( p_check_task_clockin.device_id ) AS \"已巡检数\"  FROM \tsl.p_check_plan \tJOIN sl.p_check_task_clockin ON p_check_plan.plan_id = p_check_task_clockin.plan_id  GROUP BY \tp_check_plan.plan_id "
+    },
+    {
+        "question": "今日巡检工单维修情况",
+        "sql": "SELECT     COUNT(CASE WHEN p_check_order.order_state = 2 THEN 1 END) AS \"待维修\",     COUNT(CASE WHEN p_check_order.order_state IN (3, 5, 6, 7, 8, 9) THEN 1 END) AS \"维修完成\" FROM     sl.p_check_order WHERE     p_check_order.create_time::date = current_date; "
+    },
+    {
+        "question": "不在线RTU的掉线时间",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_coplog_phase.cop_date AS \"末次在线时间\"  FROM \tsl.r_rtu \tLEFT JOIN sl.r_device_property ON r_rtu.rtu_id = r_device_property.rtu_id \tLEFT JOIN sl.r_coplog_phase ON r_rtu.rtu_id = r_coplog_phase.rtu_id  WHERE \t( r_device_property.is_enabled IS NULL OR r_device_property.is_enabled <> 0 ) --过滤掉“未启用”的设备     --没有过RTU巡测数据或者时效超过1小时的算作离线 \tAND ( r_coplog_phase.cop_date IS NULL OR r_coplog_phase.is_succeeded = 0 OR r_coplog_phase.cop_date < now( ) - INTERVAL '1 hour' ) "
+    },
+    {
+        "question": "巡检任务中生成了多少工单（一级工单、二级工单、三级工单及工单总数）",
+        "sql": "SELECT     COUNT(p_check_order.ID) AS \"工单总数\",     SUM(CASE WHEN p_check_task_clockin_issue.risk_level = '9001' THEN 1 ELSE 0 END) AS \"一级工单\",     SUM(CASE WHEN p_check_task_clockin_issue.risk_level = '9002' THEN 1 ELSE 0 END) AS \"二级工单\",     SUM(CASE WHEN p_check_task_clockin_issue.risk_level = '9003' THEN 1 ELSE 0 END) AS \"三级工单\" FROM     sl.p_check_order     INNER JOIN sl.p_check_task         ON p_check_order.task_id = p_check_task.task_id     INNER JOIN sl.p_check_plan         ON p_check_task.plan_id = p_check_plan.plan_id     LEFT JOIN sl.p_check_task_clockin_issue         ON p_check_order.ID = p_check_task_clockin_issue.check_order_id WHERE     p_check_plan.plan_name = '巡检任务名称'; "
+    },
+    {
+        "question": "巡检计划中巡检设备总数、巡检RTU数、巡检灯杆数、已巡检数",
+        "sql": " SELECT     ts.plan_name AS \"巡检计划\",     ts.total_devices AS \"巡检设备总数\",     ts.rtu_qty AS \"巡检RTU数\",     ts.lampost_qty AS \"巡检灯杆数\",     COALESCE(cs.inspected_count, 0) AS \"已巡检数\" FROM (     SELECT         plan_id,         plan_name,         SUM(rtu_qty) AS rtu_qty,         SUM(lampost_qty) AS lampost_qty,         SUM(rtu_qty + lampost_qty) AS total_devices     FROM sl.p_check_task     GROUP BY plan_id, plan_name ) ts LEFT JOIN (     SELECT         plan_id,         COUNT(device_id) AS inspected_count     FROM sl.p_check_task_clockin     GROUP BY plan_id ) cs ON ts.plan_id = cs.plan_id; "
+    },
+    {
+        "question": "灯杆上报的巡测数据",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tl_lamppost.lamp_post_number AS \"灯杆序号\", \tl_coplog.alone_lamp_id AS \"灯源ID\", \tl_coplog.is_online AS \"在线状态\", \tl_coplog.is_switch_on AS \"开灯状态\", \tl_coplog.cop_date AS \"巡测时间\", \tl_coplog.voltage AS \"电压\", \tl_coplog.lamp_isp AS \"电流\", \tl_coplog.power_factor AS \"功率因数\", \tl_coplog.active_power AS \"有功功率\", \tl_coplog.reactive_power AS \"无功功率\", \tl_coplog.leakage_voltage AS \"漏电电压\", \tl_coplog.leakage_current AS \"漏电电流\", \tl_coplog.lightintensity AS \"光照值\", \tl_coplog.dimming_value AS \"调光值\", \tl_coplog.light_time AS \"亮灯时间\", \tl_coplog.energy AS \"电能量\", \tl_coplog.csq AS \"信号强度\", \tl_coplog.device_time AS \"设备时间\"  FROM \tsl.l_coplog \tJOIN sl.l_lamppost ON l_lamppost.lamp_post_id = l_coplog.lamp_post_id  WHERE \tl_lamppost.lamp_post_code = '灯杆编号'  ORDER BY \tl_coplog.cop_date DESC  \tLIMIT 20; "
+    },
+    {
+        "question": "灯杆坐标信息/位置信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\" FROM \tsl.l_lamppost  ORDER BY \tl_lamppost.lamp_post_code  \tLIMIT 20 "
+    },
+    {
+        "question": "巡检计划的巡检小组数",
+        "sql": "SELECT \tp_check_plan.plan_id AS \"巡检计划ID\", \tp_check_plan.plan_name AS \"巡检计划名称\", \tCOUNT ( p_check_plan_group.group_id ) AS \"巡检小组数\"  FROM \tsl.p_check_plan_group \tJOIN sl.p_check_plan ON p_check_plan.plan_id = p_check_plan_group.plan_id  GROUP BY \tp_check_plan.plan_id "
+    },
+    {
+        "question": "巡检小组今日的巡检进度",
+        "sql": "SELECT     inspected.actualQtByAll AS \"已巡检设备数\",     p_check_device_group.device_num AS \"巡检设备总数\",     ROUND(         CASE              WHEN p_check_device_group.device_num IS NULL OR p_check_device_group.device_num = 0 THEN 0             ELSE inspected.actualQtByAll * 100.0 / p_check_device_group.device_num          END,         2     ) AS \"任务进度\" FROM     (         SELECT              COUNT(p_check_task_clockin.device_id) AS actualQtByAll,             p_check_task.task_id         FROM             sl.p_check_task_clockin             INNER JOIN sl.p_check_task                  ON p_check_task_clockin.task_id = p_check_task.task_id             INNER JOIN sl.p_check_group                  ON p_check_task.group_id = p_check_group.group_id         WHERE             p_check_group.group_name = '巡检小组名称'             AND p_check_task_clockin.clockin_time::DATE = CURRENT_DATE         GROUP BY             p_check_task.task_id     ) inspected     LEFT JOIN sl.p_check_device_group          ON p_check_device_group.task_id = inspected.task_id         AND p_check_device_group.date_time = CURRENT_DATE; "
+    },
+    {
+        "question": "rtu下单灯控制器的数量",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tCOUNT ( l_alonelamp_control.alone_lamp_control_id ) AS \"控制器数量\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id \tJOIN sl.r_road_switch ON r_rturelay.rturelay_id = r_road_switch.rturelay_id \tJOIN sl.r_rturoad ON r_road_switch.road_switch_id = r_rturoad.road_switch_id \tJOIN sl.l_alonelamp ON l_alonelamp.rtu_road_id = r_rturoad.rturoad_id \tJOIN sl.l_alonelamp_control ON l_alonelamp_control.alone_lamp_control_id = l_alonelamp.alone_lamp_control_id  GROUP BY \tr_rtu.rtu_id, \tr_rtu.rtu_code, \tr_rtu.rtu_name  ORDER BY \tr_rtu.rtu_id "
+    },
+    {
+        "question": "查询近7天每天上线率",
+        "sql": "SELECT \treport_date AS 日期, \tonline_rate AS 上线率  FROM \tsl.l_lamp_online_rate  WHERE \treport_date >= CURRENT_DATE - INTERVAL '7 days'  \tAND report_type = 'total'  \tand organ_id = '123' ORDER BY \treport_date DESC; "
+    },
+    {
+        "question": "支路漏电电流",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_coplog_phase.relay_leak_currents AS \"支路漏电电流\", \tr_coplog_phase.cop_date AS \"数据采集时间\"  FROM \tsl.r_rtu \tLEFT JOIN sl.r_coplog_phase ON r_rtu.rtu_id = r_coplog_phase.rtu_id ORDER BY \tr_rtu.rtu_code, \tr_coplog_phase.cop_date"
+    },
+    {
+        "question": "查询出曾经发生过疑似漏电的的单灯信息",
+        "sql": "SELECT \tl_his_hitch_alarm.alone_lamp_id AS \"单灯ID\", \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tb_hitch_dic.hitch_name LIKE'%漏电%'  \tLIMIT 20 "
+    },
+    {
+        "question": "现在在线的单灯控制器数量",
+        "sql": "SELECT COUNT(DISTINCT l_alonelamp.alone_lamp_control_id) as \"在线数量\" FROM \tsl.l_coplog \tJOIN sl.l_alonelamp ON l_alonelamp.alone_lamp_id = l_coplog.alone_lamp_id  WHERE \tl_coplog.is_online = 1 \tAND TO_CHAR( l_coplog.cop_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' ) "
+    },
+    {
+        "question": "rtu支路漏电电流大于0的支路（实时数据查询）",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路ID\", \tr_rturelay.rturelay_name AS \"支路名称\", \tr_coplog_phase.cop_date AS \"巡测日期\", \tCOALESCE ( NULLIF ( ( regexp_split_to_array( r_coplog_phase.relay_leak_currents, ',' ) ) [ r_rturelay.rturelay_number ], '' ), '0.0' ) AS \"支路漏电电流\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id \tJOIN sl.r_coplog_phase ON r_rturelay.rtu_id = r_coplog_phase.rtu_id  WHERE \tCOALESCE ( NULLIF ( ( regexp_split_to_array( r_coplog_phase.relay_leak_currents, ',' ) ) [ r_rturelay.rturelay_number ], '' ), '0.0' ) :: NUMERIC > 0  ORDER BY \tr_coplog_phase.cop_date DESC "
+    },
+    {
+        "question": "RTU漏电电流查询",
+        "sql": "SELECT DISTINCT   r_rtu.rtu_code AS \"RTU编号\",   r_rtu.rtu_name AS \"RTU名称\" FROM   sl.r_rtu JOIN sl.r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id JOIN sl.r_his_coplog_phase ON r_rturelay.rtu_id = r_his_coplog_phase.rtu_id WHERE r_his_coplog_phase.cop_date::date = '2024-10-01'   AND COALESCE(     NULLIF(       (         regexp_split_to_array(r_his_coplog_phase.relay_leak_currents, ',')       )[r_rturelay.rturelay_number],       ''     ),     '0.0'   )::NUMERIC BETWEEN 1.5 AND 3 ORDER BY   r_rtu.rtu_code LIMIT 20; "
+    },
+    {
+        "question": "按灯杆编号查询故障日报表",
+        "sql": "SELECT \tl_his_hitch_alarm_report.hitch_dic_id AS \"故障类型\", \tl_his_hitch_alarm_report.hitch_name AS \"故障名称\", \tl_his_hitch_alarm_report.rtu_id AS \"RTU ID\", \tl_his_hitch_alarm_report.rtu_name AS \"RTU名称\", \tl_his_hitch_alarm_report.position_name AS \"工区名称\", \tl_his_hitch_alarm_report.street_id AS \"道路ID\", \tl_his_hitch_alarm_report.street_name AS \"道路名称\", \tl_his_hitch_alarm_report.street_side_type AS \"路侧\", \tl_his_hitch_alarm_report.lamp_post_code AS \"灯杆编号\", \tl_his_hitch_alarm_report.lamp_post_number AS \"灯杆序号\", \tl_his_hitch_alarm_report.lamp_effect AS \"灯源用途\", \tl_his_hitch_alarm_report.occur_date AS \"发生时间\", \tl_his_hitch_alarm_report.conduct_date AS \"处理时间\", \tl_his_hitch_alarm_report.report_date AS \"报表日期\"  FROM \tsl.l_his_hitch_alarm_report  WHERE \tl_his_hitch_alarm_report.lamp_post_code = '灯杆编号'  \tAND TO_CHAR( l_his_hitch_alarm_report.report_date, 'YYYY-MM-DD' ) BETWEEN '报表开始时间' AND '报表结束时间' "
+    },
+    {
+        "question": "按工区显示昨天的单灯上线率情况",
+        "sql": "SELECT \tb_work_area.work_area_name AS \"工区名称\", \tl_lamp_online_rate.alone_lamp_control_count AS \"单灯控制器数量\", \tl_lamp_online_rate.online_count AS \"在线数量\", \tl_lamp_online_rate.online_rate AS \"上线率\"  FROM \tsl.l_lamp_online_rate \tJOIN sl.b_work_area ON l_lamp_online_rate.report_key_id = b_work_area.work_area_id  WHERE \tl_lamp_online_rate.report_date = CURRENT_DATE - INTERVAL '1 day'  \tAND l_lamp_online_rate.report_type = 'workarea'  \tLIMIT 20 "
+    },
+    {
+        "question": "列出所有的报警类型",
+        "sql": "SELECT \tb_hitch_dic.hitch_dic_id AS \"报警类型\", \tb_hitch_dic.hitch_dic_code AS \"故障编号\", \tb_hitch_dic.hitch_name AS \"故障名称\", \tb_hitch_dic.weight_facto AS \"告警级别\", \tb_hitch_dic.remark AS \"备注\", \tb_hitch_dic.CONDITION AS \"条件\", \tb_hitch_dic.delay_time AS \"延迟时间\", \tb_hitch_dic.equipment_type_id AS \"设备类型ID\", \tb_hitch_dic.display_order AS \"显示顺序\", \tb_hitch_dic.is_default_enabled AS \"是否默认启用\", \tb_hitch_dic.send_times AS \"发送次数\", \tb_hitch_dic.send_interval AS \"发送间隔\", \tb_hitch_dic.is_alarmed AS \" 报警是否解除\", \tb_hitch_dic.is_smssend AS \"是否短信发送\", \tb_hitch_dic.is_emailsend AS \"是否邮件发送\", \tb_hitch_dic.confirm_time AS \"确认时间\"  FROM \tsl.b_hitch_dic "
+    },
+    {
+        "question": "RTU道路信息",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_control_cabinet.control_cabinet_name AS \"控制箱名称\", \tr_rtu.add_date AS \"添加日期\", \tb_street.street_name AS \"道路名称\"  FROM \tsl.r_rtu \tJOIN sl.r_control_cabinet ON r_rtu.control_cabinet_id = r_control_cabinet.control_cabinet_id \tJOIN sl.b_street ON r_control_cabinet.street_id = b_street.street_id  ORDER BY \tr_rtu.rtu_code  \tLIMIT 20; "
+    },
+    {
+        "question": "按类型统计昨天的所有报警",
+        "sql": "SELECT      b_hitch_dic.hitch_name AS \"报警类型\",     COUNT(*) AS \"报警次数\" FROM      sl.l_his_hitch_alarm JOIN      sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id WHERE      DATE(l_his_hitch_alarm.alarm_add_date) = CURRENT_DATE - INTERVAL '1 day' GROUP BY      b_hitch_dic.hitch_name ORDER BY      \"报警次数\" DESC LIMIT      20;  "
+    },
+    {
+        "question": "目前有哪些单灯控制器处于离线状态",
+        "sql": "SELECT \tl_alonelamp_control.alone_lamp_control_id AS \"单灯控制器ID\", \tl_alonelamp_control.lamp_post_id AS \"所属灯杆\", \tl_alonelamp_control.manufacturer AS \"生产厂家\", \tl_alonelamp_control.add_date AS \"安装日期\", \tl_lamppost.lamp_post_code AS \"灯杆编号\", \t( CASE WHEN l_coplog.is_online = 0 THEN '离线' ELSE'在线' END ) AS \"状态\", \tl_coplog.cop_date AS \"上报时间\"  FROM \tsl.l_coplog \tJOIN sl.l_alonelamp ON l_alonelamp.alone_lamp_id = l_coplog.alone_lamp_id \tJOIN sl.l_alonelamp_control ON l_alonelamp_control.alone_lamp_control_id = l_alonelamp.alone_lamp_control_id \tJOIN sl.l_lamppost ON l_alonelamp_control.lamp_post_id = l_lamppost.lamp_post_id  WHERE \tl_coplog.is_online = 0  \tLIMIT 20 "
+    },
+    {
+        "question": "最近几天里哪些历史报警未解除的灯杆",
+        "sql": "SELECT \tl_his_hitch_alarm.lamp_post_id AS \"灯杆ID\", \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\", \tl_his_hitch_alarm.last_date AS \"最后发生时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tl_his_hitch_alarm.alarm_state IN ( 0, 1 )  --0,1 均为未解除状态  \tAND l_his_hitch_alarm.alarm_add_date >= CURRENT_DATE - INTERVAL '10 days'  ORDER BY \tl_his_hitch_alarm.alarm_add_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "巡检任务中的巡检进度",
+        "sql": "SELECT SUM(A.actualQtByAll ) AS \"已巡检设备数\", \tSUM (A.confirm_device_num ) AS \"巡检设备总数\", \tround(SUM(A.actualQtByAll) * 100.0 / SUM ( A.confirm_device_num ), 2 ) AS \"整体进度\"  FROM \t( \tSELECT COUNT \t\t( p_check_task_clockin.device_id ) actualQtByAll, \t\tp_check_task.task_id, \t\tp_check_task.confirm_device_num  \tFROM \t\tsl.p_check_task_clockin \t\tLEFT JOIN sl.p_check_task ON p_check_task_clockin.task_id = p_check_task.task_id \t\tLEFT JOIN sl.p_check_plan ON p_check_task.plan_id = p_check_plan.plan_id  \tWHERE \t\tp_check_plan.plan_name = '巡检任务名称'  \tGROUP BY \tp_check_task.task_id  \t) A "
+    },
+    {
+        "question": "当前单灯的在线情况；今天有哪些单灯不在线；目前有哪些单灯处于掉线",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tl_lamppost.lamp_post_number AS \"灯杆序号\", \tb_street.street_name AS \"道路名称\", \tl_coplog.alone_lamp_id AS \"灯源ID\", \tl_coplog.is_online AS \"在线状态\", \tl_coplog.is_switch_on AS \"开灯状态\", \tl_coplog.voltage AS \"电压\", \tl_coplog.lamp_isp AS \"电流\", \tl_coplog.power_factor AS \"功率因数\", \tl_coplog.cop_date AS \"巡测日期\", \tl_coplog.active_power AS \"有功功率\", \tl_coplog.reactive_power AS \"无功功率\", \tl_coplog.energy AS \"电能量\", \tl_coplog.csq AS \"信号强度\", \tl_coplog.device_time AS \"设备时间\"  FROM \tsl.l_coplog \tJOIN sl.l_lamppost ON l_coplog.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_coplog.street_id = b_street.street_id  WHERE \tl_coplog.is_online = 0  --1:在线，0:离线 ORDER BY \tl_coplog.cop_date DESC  \tLIMIT 20; "
+    },
+    {
+        "question": "道路上的单灯节能方案",
+        "sql": "WITH sub AS ( \tSELECT DISTINCT \t\tl_onoff_plan.onoff_plan_id, \t\tl_onoff_plan.onoff_plan_name, \t\tregexp_split_to_table( control_unit_filter.street_filter, ',' ) AS \"street_id\"  \tFROM \t\tsl.l_onoff_plan \t\tLEFT JOIN sl.l_onoff_time ON l_onoff_plan.onoff_plan_id = l_onoff_time.onoff_plan_id \t\tLEFT JOIN sl.l_control_unit ON l_onoff_time.onoff_time_id = l_control_unit.onoff_time_id \t\tLEFT JOIN sl.control_unit_filter ON l_control_unit.filter_id = control_unit_filter.filter_id  \t) SELECT \tl_onoff_plan.onoff_plan_name AS \"方案名称\", \tSTRING_AGG ( b_street.street_name, ',' ) AS \"道路\", \tl_onoff_plan.cycle_count AS \"循环周期\", \tl_onoff_plan.end_date AS \"结束时间\", \tl_onoff_plan.is_enable AS \"是否启用\"  FROM \tsl.l_onoff_plan \tLEFT JOIN sub ON sub.onoff_plan_id = l_onoff_plan.onoff_plan_id \tLEFT JOIN sl.b_street ON b_street.street_id = sub.street_id  WHERE \tb_street.street_name = '道路名称'  GROUP BY \tl_onoff_plan.onoff_plan_name, \tl_onoff_plan.cycle_count, \tl_onoff_plan.end_date, \tl_onoff_plan.is_enable "
+    },
+    {
+        "question": "巡检任务中各个巡检小组的巡检设备完成情况",
+        "sql": "SELECT     p_check_task.plan_name AS \"任务名称\",     p_check_group.group_name AS \"巡检小组\",     p_check_plan.plan_start_date AS \"开始时间\",     p_check_plan.plan_deadline AS \"结束时间\",     p_check_task.confirm_device_num AS \"巡检设备总数\",     COALESCE(clockin.checknum, 0) AS \"已巡检设备数\",     ROUND(         COALESCE(clockin.checknum, 0) * 100.0 /          NULLIF(p_check_task.confirm_device_num, 0),          2     ) AS \"完成比例\",     COALESCE(orders.ordernum, 0) AS \"工单数\" FROM     sl.p_check_task     LEFT JOIN sl.p_check_plan          ON p_check_plan.plan_id = p_check_task.plan_id     LEFT JOIN sl.p_check_group          ON p_check_group.group_id = p_check_task.group_id     LEFT JOIN (         SELECT              task_id,             COUNT(device_id) AS checknum         FROM              sl.p_check_task_clockin         GROUP BY              task_id     ) clockin          ON p_check_task.task_id = clockin.task_id     LEFT JOIN (         SELECT              task_id,             COUNT(ID) AS ordernum         FROM              sl.p_check_order         GROUP BY              task_id     ) orders          ON p_check_task.task_id = orders.task_id WHERE     p_check_task.plan_name = '巡检任务名称'; "
+    },
+    {
+        "question": "rtu坐标信息",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\" FROM \tsl.r_rtu  ORDER BY \tr_rtu.rtu_code  "
+    },
+    {
+        "question": "巡检工单的状态/进度",
+        "sql": "SELECT \tp_check_order.order_number \"工单编号\", \tCOALESCE ( l_lamppost_survey_check.lamp_post_code, l_lamppost_survey_check.old_lamp_post_code ) \"设备编号\", \t( \tCASE \t\t\tp_check_order.order_state  \t\t\tWHEN 2 THEN \t\t\t'处理中'  \t\t\tWHEN 3 THEN \t\t\t'待审核'  \t\t\tWHEN 4 THEN \t\t\t'回退'  \t\t\tWHEN 5 THEN \t\t\t'待复核'  \t\t\tWHEN 7 THEN \t\t\t'已办结'  \t\t\tWHEN 8 THEN \t\t\t'已终止'  \t\t\tWHEN 9 THEN \t\t\t'已办结' ELSE'其他'  \t\tEND  \t\t) AS \"当前进度\", \t\tp_check_order.create_user AS \"巡检人\", \t\tto_char( p_check_order.create_time, 'YYYY-MM-DD HH24:MI:SS' ) AS \"上报时间\", \t\tp_check_task_clockin_issue.require_date AS \"要求完成时间\", \t\tp_check_task.task_name AS \"巡检任务\", \t\te1.type_value AS \"隐患等级\", \t\tp_check_task_clockin_issue.check_enum_item_content AS \"检查内容\", \t\tp_check_task_clockin_issue.check_issue_remark AS \"问题记录\", \t\te2.check_options AS \"维修工区-维修小组\"  \tFROM \t\tsl.p_check_order \t\tLEFT JOIN sl.p_check_task_clockin_issue ON p_check_order.ID = p_check_task_clockin_issue.check_order_id \t\tLEFT JOIN sl.p_check_task ON p_check_order.task_id = p_check_task.task_id \t\tLEFT JOIN sl.p_check_enum e1 ON e1.ID = p_check_task_clockin_issue.risk_level \t\tLEFT JOIN sl.p_check_enum e2 ON e2.ID = p_check_order.work_area_id  \t\tAND e2.type_code = 'workarea_link' \t\tLEFT JOIN sl.l_lamppost_survey_check ON p_check_order.device_id = l_lamppost_survey_check.ID  \t\tWHERE \t\tp_check_order.order_state = '2' --当前进度:0-待确认,1-驳回,2-处理中,3-待审核,4-回退,5-待复核,6-驳回,7-已办结,8-已终止,9-已办结 \tORDER BY \tp_check_order.create_time DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "今天发生过报警的灯杆信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"道路名称\", \tb_hitch_dic.hitch_name AS \"报警类型\", \tl_his_hitch_alarm.alarm_add_date AS \"首次报警时间\", \tl_his_hitch_alarm.last_date AS \"末次报警时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' ) "
+    },
+    {
+        "question": "道路上灭灯数量/灭灯灯源数量",
+        "sql": "SELECT COUNT(*) AS \"灭灯数量\"  FROM \tsl.open_rate_detail \tJOIN sl.l_alonelamp ON l_alonelamp.alone_lamp_id = open_rate_detail.alone_lamp_id \tJOIN sl.l_lamppost ON sl.l_alonelamp.lamp_post_id = sl.l_lamppost.lamp_post_id \tJOIN sl.b_street ON sl.l_lamppost.street_id = sl.b_street.street_id  WHERE \tsl.open_rate_detail.STATE = 1 -- 灭灯状态 \tAND report_date >= CURRENT_DATE - INTERVAL '2 days'  \tAND sl.b_street.street_name = '道路名称' "
+    },
+    {
+        "question": "昨日产生的巡检工单",
+        "sql": "SELECT     p_check_order.order_number AS \"工单编号\",     COALESCE(l_lamppost_survey_check.lamp_post_code, l_lamppost_survey_check.old_lamp_post_code, '未知设备') AS \"设备编号\",     CASE p_check_order.order_state         WHEN 2 THEN '处理中'         WHEN 3 THEN '待审核'         WHEN 4 THEN '回退'         WHEN 5 THEN '待复核'         WHEN 7 THEN '已办结'         WHEN 8 THEN '已终止'         WHEN 9 THEN '已办结'         ELSE '其他'     END AS \"当前进度\",     p_check_order.create_user AS \"巡检人\",     TO_CHAR(p_check_order.create_time, 'YYYY-MM-DD HH24:MI:SS') AS \"上报时间\",     p_check_task_clockin_issue.require_date AS \"要求完成时间\",     p_check_task.task_name AS \"巡检任务\",     e1.type_value AS \"隐患等级\",     p_check_task_clockin_issue.check_enum_item_content AS \"检查内容\",     p_check_task_clockin_issue.check_issue_remark AS \"问题记录\",     COALESCE(REPLACE(e2.check_options, '超越-', ''), '未知工区') AS \"维修工区-维修小组\" FROM     sl.p_check_order     LEFT JOIN sl.p_check_task_clockin_issue         ON p_check_order.ID = p_check_task_clockin_issue.check_order_id     LEFT JOIN sl.p_check_task         ON p_check_order.task_id = p_check_task.task_id     LEFT JOIN sl.p_check_enum e1         ON e1.ID = p_check_task_clockin_issue.risk_level     LEFT JOIN sl.p_check_enum e2         ON e2.ID = p_check_order.work_area_id         AND e2.type_code = 'workarea_link'     LEFT JOIN sl.l_lamppost_survey_check         ON p_check_order.device_id = l_lamppost_survey_check.ID WHERE     p_check_order.create_time >= CURRENT_DATE - INTERVAL '1 days' ORDER BY     p_check_order.create_time DESC LIMIT 20; "
+    },
+    {
+        "question": "昨日12:00至今日12:00首次发生的单灯报警",
+        "sql": "WITH ranked_alarms AS (     SELECT         l_his_hitch_alarm.hitch_dic_id,         l_his_hitch_alarm.street_id,         l_his_hitch_alarm.alone_lamp_id,         l_his_hitch_alarm.alarm_add_date,         l_his_hitch_alarm.last_date,         l_his_hitch_alarm.conduct_date,         l_his_hitch_alarm.alarm_state,         l_lamppost.lamp_post_code,         b_hitch_dic.hitch_name,         ROW_NUMBER() OVER (             PARTITION BY l_his_hitch_alarm.lamp_post_id, l_his_hitch_alarm.hitch_dic_id             ORDER BY l_his_hitch_alarm.last_date DESC         ) AS rn     FROM sl.l_his_hitch_alarm     JOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id     JOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id     WHERE l_his_hitch_alarm.alarm_add_date            BETWEEN CURRENT_DATE - INTERVAL '12 hours'            AND CURRENT_DATE + INTERVAL '12 hours' ) SELECT     hitch_name AS \"报警类型\",     lamp_post_code AS \"灯杆编号\",     alarm_add_date AS \"报警时间\",     last_date AS \"最后报警时间\",     conduct_date AS \"报警解除时间\",     alarm_state AS \"报警状态\",     hitch_dic_id AS \"报警类型ID\",     alone_lamp_id AS \"灯源ID\",     street_id AS \"道路ID\" FROM ranked_alarms WHERE rn = 1; "
+    },
+    {
+        "question": "统计每天漏电电流大于0的支路数量",
+        "sql": "SELECT \tto_char( r_his_coplog_phase.cop_date, 'yyyy-mm-dd' ) AS \"日期\", \tCOUNT ( DISTINCT r_rturelay.rturelay_id ) AS \"漏电支路数\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id \tJOIN sl.r_his_coplog_phase ON r_rturelay.rtu_id = r_his_coplog_phase.rtu_id  WHERE \tCOALESCE ( NULLIF ( ( regexp_split_to_array( r_his_coplog_phase.relay_leak_currents, ',' ) ) [ r_rturelay.rturelay_number ], '' ), '0.0' ) :: NUMERIC > 5  \tAND r_his_coplog_phase.cop_date BETWEEN '2024-10-06' AND '2024-11-15'  GROUP BY \tto_char( r_his_coplog_phase.cop_date, 'yyyy-mm-dd' ) "
+    },
+    {
+        "question": "今天发生了哪些报警",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \" 灯杆编号\", \tb_street.street_name AS \"道路名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警时间\", \t( CASE WHEN l_his_hitch_alarm.alarm_state = 2 THEN '已解除' ELSE'未解除' END ) AS \"报警状态\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  \tLIMIT 20 "
+    },
+    {
+        "question": "查询下今天的开关灯时间",
+        "sql": "SELECT \tsys_onoff_time.open_time AS \"开灯时间\", \tsys_onoff_time.off_time AS \"关灯时间\", \tTO_CHAR( sys_onoff_time.on_off_date, 'YYYY-MM-DD' ) AS \"开关日期\", \tTO_CHAR( sys_onoff_time.start_time, 'YYYY-MM-DD HH24:MI:SS' ) AS \"开始时间\", \tTO_CHAR( sys_onoff_time.end_time, 'YYYY-MM-DD HH24:MI:SS' ) AS \"结束时间\"  FROM \tsl.sys_onoff_time  WHERE \ton_off_date = CURRENT_DATE "
+    },
+    {
+        "question": "对产生巡检工单的道路，进行巡检工单数量统计",
+        "sql": "SELECT b_street.street_name AS \"道路名称\", \tCOUNT(*) AS \"巡检工单数量\"  FROM \tsl.p_check_order \tJOIN sl.l_lamppost_survey_check ON p_check_order.device_id = l_lamppost_survey_check. \tID JOIN sl.b_street ON l_lamppost_survey_check.street_id = b_street.street_id  GROUP BY \tb_street.street_name ORDER BY \t巡检工单数量 DESC LIMIT 20 "
+    },
+    {
+        "question": "今天发生报警的RTU信息",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_his_hitch_alarm.hitch_dic_id AS \"报警类型\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tr_his_hitch_alarm.occur_date AS \"首次报警时间\", \tr_his_hitch_alarm.last_date AS \"末次报警时间\"  FROM \tsl.r_his_hitch_alarm \tJOIN sl.r_rtu ON r_his_hitch_alarm.rtu_id = r_rtu.rtu_id \tJOIN sl.b_hitch_dic ON r_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( r_his_hitch_alarm.occur_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  \tLIMIT 20 "
+    },
+    {
+        "question": "按巡检任务问题类型统计昨天的工单完成情况",
+        "sql": "SELECT     COALESCE(p_check_task_clockin_issue.check_enum_item_content, '未知问题') AS \"问题类型\",     COUNT(p_check_order.ID) AS \"工单总数\",     COUNT(CASE WHEN p_check_order.order_state = 2 THEN 1 END) AS \"待维修\",     COUNT(CASE WHEN p_check_order.order_state IN (3, 5, 6, 7, 8, 9) THEN 1 END) AS \"维修完成\" FROM     sl.p_check_order     LEFT JOIN sl.p_check_task_clockin_issue          ON p_check_order.ID = p_check_task_clockin_issue.check_order_id     LEFT JOIN sl.p_check_task          ON p_check_order.task_id = p_check_task.task_id     LEFT JOIN sl.p_check_plan          ON p_check_task.plan_id = p_check_plan.plan_id WHERE     p_check_order.create_time::date >= CURRENT_DATE - INTERVAL '1 days' GROUP BY     p_check_task_clockin_issue.check_enum_item_content; "
+    },
+    {
+        "question": "灭灯的灯杆",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"道路名称\", \topen_rate_detail.report_date AS \"日期\"  FROM \tsl.open_rate_detail \tJOIN sl.l_alonelamp ON open_rate_detail.alone_lamp_id = l_alonelamp.alone_lamp_id \tJOIN sl.l_lamppost ON l_alonelamp.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id  WHERE \topen_rate_detail.STATE = 1  \tAND TO_CHAR( open_rate_detail.report_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE-3, 'YYYY-MM-DD' ) "
+    },
+    {
+        "question": "列出最近7天发生灯源故障的灯杆信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"道路名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警时间\", \t( CASE WHEN l_his_hitch_alarm.alarm_state = 2 THEN '已解除' ELSE'未解除' END ) AS \"报警状态\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON b_hitch_dic.hitch_dic_id = l_his_hitch_alarm.hitch_dic_id  WHERE \tb_hitch_dic.hitch_name LIKE'%灯源故障%'  \tAND TO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) >= TO_CHAR( CURRENT_DATE - INTERVAL '7 days', 'YYYY-MM-DD' )  \tLIMIT 20 "
+    },
+    {
+        "question": "今天有哪些单灯发生了什么类型的报警，列出灯源信息、灯杆、单灯控制器的信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tl_alonelamp_control.alone_lamp_control_id AS \"单灯控制器ID\", \tl_alonelamp.alone_lamp_code AS \"单灯编号\", \tl_his_hitch_alarm.hitch_dic_id AS \"报警类型\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_alonelamp_control.manufacturer AS \"制造商\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.l_alonelamp ON l_his_hitch_alarm.alone_lamp_id = l_alonelamp.alone_lamp_id \tJOIN sl.l_alonelamp_control ON l_alonelamp.alone_lamp_control_id = l_alonelamp_control.alone_lamp_control_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  \tLIMIT 20 "
+    },
+    {
+        "question": "灯从报表中获取过去7天灯源的亮灯率，亮灯数，灭灯数杆坐标信息",
+        "sql": "SELECT \topen_rate.report_date AS \"日期\", \topen_rate.lamp_count AS \"灯源个数\", \topen_rate.open_count AS \"亮灯数\", \topen_rate.close_count AS \"灭灯数\", \topen_rate.open_rate AS \"亮灯率\"  FROM \tsl.open_rate  WHERE \topen_rate.report_date >= CURRENT_DATE - INTERVAL '7 days'  \tAND open_rate.report_type = 'total' -- total:按日进行统计; street:按街道/道路; workarea:按工区 \tAND open_rate.date_type = 'D' -- D:日报；M:月报；Y：年报 ORDER BY \topen_rate.report_date DESC "
+    },
+    {
+        "question": "今天发生灯源故障报警的灯杆信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tb_hitch_dic.hitch_name LIKE'%灯源故障%'  \tAND TO_CHAR(l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD') = TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') "
+    },
+    {
+        "question": "按工区查询亮灯率",
+        "sql": "SELECT \topen_rate.report_date as \"报表日期\", \topen_rate.report_type as \"报表类型\", \topen_rate.open_rate as \"亮灯率\", \tb_work_area.work_area_name as \"工区名称\" FROM \tsl.open_rate \tJOIN sl.b_work_area ON open_rate.report_key_id = b_work_area.work_area_id  WHERE \tb_work_area.work_area_name = '工区'  \tAND open_rate.report_date BETWEEN '2024-11-01'  \tAND '2024-11-11'  \tAND open_rate.report_type = 'workarea' -- workarea:工区；  \tAND open_rate.date_type = 'D' -- D:日报；M:月报；Y：年报 "
+    },
+    {
+        "question": "今天发生了哪些报警还没关闭",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tb_hitch_dic.hitch_name AS \"故障名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警时间\", \t( CASE WHEN l_his_hitch_alarm.alarm_state = 2 THEN '已解除' ELSE'未解除' END ) AS \"报警状态\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  \tAND l_his_hitch_alarm.alarm_state IN ( 0, 1 )  \tLIMIT 20 "
+    },
+    {
+        "question": "近三天里哪些灯杆报警还未被解除",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tb_hitch_dic.hitch_name AS \"故障名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\", \tl_his_hitch_alarm.last_date AS \"最后发生时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tl_his_hitch_alarm.alarm_state IN ( 0, 1 )  \tAND l_his_hitch_alarm.alarm_add_date >= CURRENT_DATE - INTERVAL '3 days'  ORDER BY \tl_his_hitch_alarm.alarm_add_date DESC "
+    },
+    {
+        "question": "巡检计划任务",
+        "sql": "SELECT \tp_check_plan.plan_id AS \"计划ID\", \tp_check_plan.plan_name AS \"计划名称\", \tp_check_plan.plan_start_date AS \"计划开始日期\", \tp_check_plan.plan_deadline AS \"计划截止日期\", \tp_check_plan.template_id AS \"模板ID\", \tp_check_plan.plan_frequency AS \"计划频率\", \tp_check_plan.add_user AS \"添加用户\", \tp_check_plan.add_time AS \"添加时间\", \tp_check_plan.plan_progress AS \"计划进度\", \tp_check_plan.organ_id AS \"组织ID\", \tp_check_plan.is_issued AS \"是否下发\", \tp_check_plan.day_number AS \"天数\", \t( CASE p_check_plan.plan_state WHEN 0 THEN '未完成' WHEN 1 THEN '已完成' END ) AS \"计划状态\", \tt1.type_value AS \"巡检类型\", \tt2.type_value AS \"计划周期\"  FROM \tsl.p_check_plan \tLEFT JOIN sl.p_check_template ON p_check_template.template_id = p_check_plan.template_id \tLEFT JOIN sl.p_check_enum t1 ON p_check_template.template_type = t1.ID  \tLEFT JOIN sl.p_check_enum t2 ON p_check_plan.plan_cycle = t2.ID  ORDER BY \tp_check_plan.add_time DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "按道路/街道查询节能量和节能率的月报表",
+        "sql": "SELECT \t\"energy_saving_rate\".\"report_date\" AS \"报表日期\", \t\"energy_saving_rate\".\"report_type\" AS \"报表类型\", \t\"energy_saving_rate\".\"save_elect_degree\" AS \"节能量\", \t\"energy_saving_rate\".\"energy_saving_rate\" AS \"节能率\", \t\"energy_saving_rate\".\"date_type\" AS \"时间类型\"  FROM \tsl.\"energy_saving_rate\" \tJOIN sl.\"b_street\" ON \"energy_saving_rate\".\"report_key_id\" = \"b_street\".\"street_id\"  WHERE \t\"energy_saving_rate\".\"report_date\" >= '2024-10-01'  \tAND \"energy_saving_rate\".\"report_date\" < '2024-11-01'  \tAND \"b_street\".\"street_name\" = '道路名称'  \tAND \"energy_saving_rate\".\"date_type\" = 'M'  \tAND \"energy_saving_rate\".\"report_type\" = 'street' --按道路/街道 "
+    },
+    {
+        "question": "现在/当前离线的单灯控制器的数量",
+        "sql": "SELECT COUNT( DISTINCT l_alonelamp.alone_lamp_control_id ) AS \"离线数量\"  FROM \tsl.l_coplog \tJOIN sl.l_alonelamp ON l_alonelamp.alone_lamp_id = l_coplog.alone_lamp_id  WHERE \tl_coplog.is_online = 0 "
+    },
+    {
+        "question": "按道路查询亮灯率",
+        "sql": "SELECT \topen_rate.report_date AS \"日期\", \topen_rate.report_type AS \"报表类型\", \topen_rate.open_rate AS \"亮灯率\", \tb_street.street_name AS \"道路名称\"  FROM \tsl.open_rate \tJOIN sl.b_street ON open_rate.report_key_id = b_street.street_id  WHERE \tb_street.street_name = '道路名称'  \tAND open_rate.report_date BETWEEN '2024-11-01' AND '2024-11-11'  \tAND open_rate.report_type = 'street'  \tAND open_rate.date_type = 'D' -- D:日报；M:月报；Y：年报 "
+    },
+    {
+        "question": "灯杆发生的报警",
+        "sql": "SELECT \tl_his_hitch_alarm.lamp_post_id AS \"灯杆ID\", \tl_his_hitch_alarm.hitch_dic_id AS \"报警类型\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id  WHERE \tl_lamppost.lamp_post_code = '灯杆编号'  ORDER BY \tl_his_hitch_alarm.alarm_add_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "统计灭灯的单灯数量；统计灯源灭灯数量；灭灯数量统计；按日期对灭灯数量进行统计",
+        "sql": "SELECT COUNT(*) AS \"灭灯数量\" FROM sl.open_rate_detail WHERE report_date = '2024-11-03' AND state = 1 "
+    },
+    {
+        "question": "现在/当前亮灯灯源数量",
+        "sql": "SELECT COUNT(*) AS \"亮灯灯源数量\" FROM sl.l_coplog WHERE l_coplog.is_switch_on > 0 "
+    },
+    {
+        "question": "昨天单灯的上线率",
+        "sql": "SELECT \tl_lamp_online_rate.lamp_online_rate_id AS \"上线率ID\", \tl_lamp_online_rate.report_date AS \"日期\", \tl_lamp_online_rate.report_type AS \"报告类型\", \tl_lamp_online_rate.alone_lamp_count AS \"单灯总数\", \tl_lamp_online_rate.online_lamp_count AS \"在线灯数\", \tl_lamp_online_rate.online_rate AS \"上线率\" FROM \tsl.l_lamp_online_rate  WHERE \tl_lamp_online_rate.report_date = CURRENT_DATE - INTERVAL '1 day'  \tAND l_lamp_online_rate.report_type = 'total'  \tLIMIT 20 "
+    },
+    {
+        "question": "道路每天的用电量/每天的能耗",
+        "sql": "SELECT \tl_energy_report.read_date_time AS \"读取时间\", \tSUM ( l_energy_report.all_electric_energy ) AS \"总用电量\"  FROM \tsl.l_energy_report \tJOIN sl.l_lamppost ON l_energy_report.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id  WHERE \tb_street.street_name = '道路名称'  \tAND l_energy_report.read_date_time >= '开始时间'  \tAND l_energy_report.read_date_time <= '结束时间'  \tAND l_energy_report.report_type = 'D'  \tAND l_energy_report.all_electric_energy < 100  GROUP BY \tl_energy_report.read_date_time  ORDER BY \tl_energy_report.read_date_time DESC "
+    },
+    {
+        "question": "统计昨天的灭灯数量",
+        "sql": "SELECT      COUNT(*) AS \"灭灯数量\"  FROM      sl.open_rate_detail  WHERE      report_date = CURRENT_DATE - INTERVAL '1 day'      AND state = 1 LIMIT      20;"
+    },
+    {
+        "question": "10月份RTU能耗/用电量排名",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tSUM ( r_energy_report.all_electric_energy ) AS \"总用电量\"  FROM \tsl.r_energy_report \tJOIN sl.r_rtu ON r_energy_report.rtu_id = r_rtu.rtu_id  WHERE \tr_energy_report.report_type = 'D'  \tAND r_energy_report.read_date_time >= '2024-10-01'  \tAND r_energy_report.read_date_time <= '2024-10-31'  \tAND r_energy_report.all_electric_energy < 1500  GROUP BY \tr_rtu.rtu_code, \tr_rtu.rtu_name  ORDER BY \tSUM ( r_energy_report.all_electric_energy ) DESC  \tLIMIT 20; "
+    },
+    {
+        "question": "统计单灯控制器数量",
+        "sql": "SELECT COUNT(*) AS \"单灯控制器数量\"  FROM \tsl.l_alonelamp_control \tJOIN sl.l_lamppost ON l_alonelamp_control.lamp_post_id = l_lamppost.lamp_post_id "
+    },
+    {
+        "question": "单灯节能方案",
+        "sql": "WITH sub AS ( \tSELECT DISTINCT \t\tl_onoff_plan.onoff_plan_id, \t\tl_onoff_plan.onoff_plan_name, \t\tregexp_split_to_table( control_unit_filter.street_filter, ',' ) AS \"street_id\"  \tFROM \t\tsl.l_onoff_plan \t\tLEFT JOIN sl.l_onoff_time ON l_onoff_plan.onoff_plan_id = l_onoff_time.onoff_plan_id \t\tLEFT JOIN sl.l_control_unit ON l_onoff_time.onoff_time_id = l_control_unit.onoff_time_id \t\tLEFT JOIN sl.control_unit_filter ON l_control_unit.filter_id = control_unit_filter.filter_id  \t)  SELECT \tl_onoff_plan.onoff_plan_name AS \"方案名称\", \tSTRING_AGG ( b_street.street_name, ',' ) AS \"道路\", \tl_onoff_plan.cycle_count AS \"循环周期\", \tl_onoff_plan.end_date AS \"结束时间\", \tl_onoff_plan.is_enable AS \"是否启用\"  FROM \tsl.l_onoff_plan \tLEFT JOIN sub ON sub.onoff_plan_id = l_onoff_plan.onoff_plan_id \tLEFT JOIN sl.b_street ON b_street.street_id = sub.street_id  GROUP BY \tl_onoff_plan.onoff_plan_name, \tl_onoff_plan.cycle_count, \tl_onoff_plan.end_date, \tl_onoff_plan.is_enable "
+    },
+    {
+        "question": "工区的节能率",
+        "sql": "SELECT \tenergy_saving_rate.report_date AS \"报表日期\", \tenergy_saving_rate.report_type AS \"报表类型\", \tenergy_saving_rate.save_elect_degree AS \"节能量\", \tenergy_saving_rate.energy_saving_rate AS \"节能率\"  FROM \tsl.energy_saving_rate \tJOIN sl.b_work_area ON energy_saving_rate.report_key_id = b_work_area.work_area_id  WHERE \tenergy_saving_rate.report_date >= '2024-10-01'  \tAND energy_saving_rate.report_date <= '2024-11-11'  \tAND energy_saving_rate.report_type = 'workarea'  \tAND b_work_area.work_area_name = '工区一'  \tAND energy_saving_rate.date_type = 'D'  ORDER BY \tenergy_saving_rate.report_date DESC"
+    },
+    {
+        "question": "从报表中查找道路上离线的单灯",
+        "sql": "SELECT \tl_lamp_online_rate_detail.alone_lamp_control_id AS \"单灯控制器ID\", \tl_lamp_online_rate_detail.report_date AS \"报表日期\", \tl_lamp_online_rate_detail.STATE AS \"状态\", \tl_lamp_online_rate_detail.non_calc_reason AS \"不计算原因\", \tl_lamp_online_rate_detail.last_online_time AS \"最后在线时间\", \tb_street.street_name AS \"道路名称\", \tl_lamppost.lamp_post_code AS \"灯杆编号\" FROM \tsl.l_lamp_online_rate_detail \tJOIN sl.b_street ON sl.l_lamp_online_rate_detail.street_id = sl.b_street.street_id \tJOIN sl.l_alonelamp ON l_alonelamp.alone_lamp_control_id = l_lamp_online_rate_detail.alone_lamp_control_id \tJOIN sl.l_lamppost ON l_alonelamp.lamp_post_id = l_lamppost.lamp_post_id  WHERE \tsl.l_lamp_online_rate_detail.report_date = CURRENT_DATE - INTERVAL '1 day'  \tAND sl.b_street.street_name = '道路名称'  \tAND sl.l_lamp_online_rate_detail.STATE = 1 "
+    },
+    {
+        "question": "未解除报警的灯杆",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \t( CASE WHEN l_his_hitch_alarm.alarm_state = 2 THEN '已解除' ELSE'未解除' END ) AS \"报警状态\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tl_his_hitch_alarm.alarm_state IN ( 0, 1 ) --0,1 均为未解除状态  ORDER BY \tl_his_hitch_alarm.alarm_add_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "发生支路漏电报警的RTU",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路ID\", \tr_rturelay.rturelay_name AS \"支路名称\", \tb_hitch_dic.hitch_name AS \"报警类型\", \tr_his_hitch_alarm.occur_date AS \"发生日期\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id \tJOIN sl.r_his_hitch_alarm ON r_rtu.rtu_id = r_his_hitch_alarm.rtu_id \tJOIN sl.b_hitch_dic ON r_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( r_his_hitch_alarm.occur_date, 'YYYY-MM-DD' ) = '2024-10-25'  \tAND b_hitch_dic.hitch_name LIKE'%支路漏电%'  ORDER BY \tr_his_hitch_alarm.occur_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "昨天的历史报警信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警添加时间\", \tl_his_hitch_alarm.alarm_state AS \"报警状态\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE - INTERVAL '1 day', 'YYYY-MM-DD' )  ORDER BY \tl_his_hitch_alarm.alarm_add_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "今天发生疑似漏电报警的灯杆信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"街道名称\", \tl_his_hitch_alarm.hitch_dic_id AS \"报警类型\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警时间\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tb_hitch_dic.hitch_name LIKE'%漏电%'  \tAND TO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  \tLIMIT 20 "
+    },
+    {
+        "question": "灯杆信息",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \"灯杆编号\", \tb_street.street_name AS \"道路名称\", \tl_lamppost.alone_lamp_count AS \"灯具个数\"  FROM \tsl.l_lamppost \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id  ORDER BY \tl_lamppost.lamp_post_code  \tLIMIT 20 "
+    },
+    {
+        "question": "RTU最后巡测记录时间/掉线时间",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_coplog_phase.cop_date AS \"末次在线时间\"  FROM \tr_rtu \tLEFT JOIN r_coplog_phase ON r_rtu.rtu_id = r_coplog_phase.rtu_id "
+    },
+    {
+        "question": "按道路输出昨天单灯的上线率",
+        "sql": "SELECT \tb_street.street_name AS \"街道名称\", \tl_lamp_online_rate.alone_lamp_control_count AS \"单灯控制器总数\", \tl_lamp_online_rate.online_count AS \"在线数量\", \tl_lamp_online_rate.online_rate AS \"上线率\"  FROM \tsl.l_lamp_online_rate \tJOIN sl.b_street ON l_lamp_online_rate.report_key_id = b_street.street_id  WHERE \tl_lamp_online_rate.report_date = CURRENT_DATE - 1  \tAND l_lamp_online_rate.report_type = 'street'  ORDER BY \tl_lamp_online_rate.online_rate DESC  \tLIMIT 20; "
+    },
+    {
+        "question": "查询RTU的全夜灯/半夜灯开关灯时间",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_number AS \"支路序号\", \tb_work_model.work_model_name AS \"工作模式\", \tr_onoff_real_time.on_off_date AS \"日期\", \tr_onoff_real_time.on_time1 AS \"开灯时间\", \tr_onoff_real_time.off_time1 AS \"关灯时间\"  FROM \tsl.r_onoff_real_time \tJOIN sl.r_rtu ON r_onoff_real_time.rtu_id = r_rtu.rtu_id \tJOIN sl.r_rturelay ON r_onoff_real_time.rtu_relay_id = r_rturelay.rturelay_id \tJOIN sl.b_work_model ON r_rturelay.work_model_id = b_work_model.work_model_id  WHERE \tr_onoff_real_time.on_off_date BETWEEN '2024-11-01' AND '2024-11-12' "
+    },
+    {
+        "question": "巡检工单",
+        "sql": "SELECT \tp_check_order.order_number \"工单编号\", \tCOALESCE ( l_lamppost_survey_check.lamp_post_code, l_lamppost_survey_check.old_lamp_post_code ) \"设备编号\", \t( \tCASE \t\t\tp_check_order.order_state  \t\t\tWHEN 2 THEN \t\t\t'处理中'  \t\t\tWHEN 3 THEN \t\t\t'待审核'  \t\t\tWHEN 4 THEN \t\t\t'回退'  \t\t\tWHEN 5 THEN \t\t\t'待复核'  \t\t\tWHEN 7 THEN \t\t\t'已办结'  \t\t\tWHEN 8 THEN \t\t\t'已终止'  \t\t\tWHEN 9 THEN \t\t\t'已办结' ELSE'其他'  \t\tEND  \t\t) AS \"当前进度\", \t\tp_check_order.create_user AS \"巡检人\", \t\tto_char( p_check_order.create_time, 'YYYY-MM-DD HH24:MI:SS' ) AS \"上报时间\", \t\tp_check_task_clockin_issue.require_date AS \"要求完成时间\", \t\tp_check_task.task_name AS \"巡检任务\", \t\te1.type_value AS \"隐患等级\", \t\tp_check_task_clockin_issue.check_enum_item_content AS \"检查内容\", \t\tp_check_task_clockin_issue.check_issue_remark AS \"问题记录\", \t\te2.check_options AS \"维修工区-维修小组\"  \tFROM \t\tsl.p_check_order \t\tLEFT JOIN sl.p_check_task_clockin_issue ON p_check_order.ID = p_check_task_clockin_issue.check_order_id \t\tLEFT JOIN sl.p_check_task ON p_check_order.task_id = p_check_task.task_id \t\tLEFT JOIN sl.p_check_enum e1 ON e1.ID = p_check_task_clockin_issue.risk_level \t\tLEFT JOIN sl.p_check_enum e2 ON e2.ID = p_check_order.work_area_id AND e2.type_code = 'workarea_link' \t\tLEFT JOIN sl.l_lamppost_survey_check ON p_check_order.device_id = l_lamppost_survey_check.ID  \tORDER BY \tp_check_order.create_time DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "rtu下支路发生的报警",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路ID\", \tr_rturelay.rturelay_name AS \"支路名称\", \tb_hitch_dic.hitch_name AS \"报警类型\", \tr_his_hitch_alarm.occur_date AS \"发生日期\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id \tJOIN sl.r_his_hitch_alarm ON r_rtu.rtu_id = r_his_hitch_alarm.rtu_id \tJOIN sl.b_hitch_dic ON r_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  ORDER BY \tr_his_hitch_alarm.occur_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "近7天节能量与节能率",
+        "sql": "SELECT \treport_date AS \"时间\", \treport_type AS \"报表类型\", \tsave_elect_degree AS \"节能量\", \tenergy_saving_rate AS \"节能率\"  FROM \tsl.energy_saving_rate  WHERE \treport_date >= CURRENT_DATE - INTERVAL '7 days'  \tAND date_type = 'D'  \tAND report_type = 'total'"
+    },
+    {
+        "question": "统计单灯最近7个月中每月的用电量/每月的能耗",
+        "sql": "SELECT \tTO_CHAR( TO_DATE( l_energy_report.read_date_time, 'YYYY-MM-DD' ), 'YYYY-MM' ) AS \"月份\", \tSUM ( l_energy_report.all_electric_energy ) AS \"每月用电量\"  FROM \tsl.l_energy_report  WHERE \tTO_DATE( l_energy_report.read_date_time, 'YYYY-MM-DD' ) >= CURRENT_DATE - INTERVAL '7 months'  \tAND l_energy_report.report_type = 'D'  \tAND l_energy_report.all_electric_energy < 100 GROUP BY \tTO_CHAR( TO_DATE( l_energy_report.read_date_time, 'YYYY-MM-DD' ), 'YYYY-MM' )  ORDER BY \tTO_CHAR( TO_DATE( l_energy_report.read_date_time, 'YYYY-MM-DD' ), 'YYYY-MM' ) DESC "
+    },
+    {
+        "question": "按巡检工单状态统计巡检任务中的巡检工单数量",
+        "sql": "WITH status_map AS (     SELECT unnest(ARRAY[2, 3, 5, 7, 8, 9]) AS order_state,            unnest(ARRAY['处理中', '待审核', '待现场复核', '已办结', '已终止', '已办结']) AS status_name ) SELECT     COUNT(p_check_order.ID) AS \"数量\",     COALESCE(status_map.status_name, COALESCE(p_check_order.order_state::TEXT, '未知状态')) AS \"状态\" FROM     sl.p_check_order     INNER JOIN sl.p_check_task         ON p_check_order.task_id = p_check_task.task_id     INNER JOIN sl.p_check_plan         ON p_check_task.plan_id = p_check_plan.plan_id     LEFT JOIN sl.status_map         ON p_check_order.order_state = status_map.order_state WHERE     p_check_plan.plan_name = '巡检任务名称' GROUP BY     p_check_order.order_state,     status_map.status_name; "
+    },
+    {
+        "question": "巡检计划的巡检人数",
+        "sql": "SELECT \tp_check_plan.plan_id AS \"巡检计划ID\", \tp_check_plan.plan_name AS \"巡检计划名称\", \tCOUNT ( 1 ) AS \"巡检人数\"  FROM \tsl.p_check_group_members \tJOIN sl.p_check_plan_group ON p_check_group_members.group_id = p_check_plan_group.group_id \tJOIN sl.p_check_plan ON p_check_plan.plan_id = p_check_plan_group.plan_id  WHERE \tp_check_group_members.role_type != 1  GROUP BY \tp_check_plan.plan_id "
+    },
+    {
+        "question": "rtu下的支路信息",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路ID\", \tr_rturelay.rturelay_number AS \"支路号\", \tr_rturelay.rturelay_name AS \"支路名称\", \tb_work_model.work_model_name AS \"工作模式名称\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rturelay.rtu_id = r_rtu.rtu_id \tJOIN sl.b_work_model ON b_work_model.work_model_id = r_rturelay.work_model_id "
+    },
+    {
+        "question": "今天有哪些报警",
+        "sql": "SELECT \tl_lamppost.lamp_post_code AS \" 灯杆编号\", \tb_street.street_name AS \"道路名称\", \tb_hitch_dic.hitch_name AS \"报警名称\", \tl_his_hitch_alarm.alarm_add_date AS \"报警时间\", \t( CASE WHEN l_his_hitch_alarm.alarm_state = 2 THEN '已解除' ELSE'未解除' END ) AS \"报警状态\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.l_lamppost ON l_his_hitch_alarm.lamp_post_id = l_lamppost.lamp_post_id \tJOIN sl.b_street ON l_lamppost.street_id = b_street.street_id \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  \tAND l_his_hitch_alarm.alarm_state IN ( 0, 1 )  \tLIMIT 20 "
+    },
+    {
+        "question": "RTU支路漏电电流数据（历史数据查询，查询指定日期的数据）",
+        "sql": "SELECT \tr_rtu.rtu_id AS \"RTU编号\",   r_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路编号\", \tr_rturelay.device_leakalarm_current AS \"漏电电流报警阈值\", \tCOALESCE ( NULLIF ( ( regexp_split_to_array( r_his_coplog_phase.relay_leak_currents, ',' ) ) [ r_rturelay.rturelay_number ], '' ), '0.0' ) AS \"漏电电流\"  FROM \tsl.r_rturelay, \tsl.r_rtu, \tsl.r_his_coplog_phase  WHERE \tr_rturelay.rtu_id = r_rtu.rtu_id  \tAND r_rturelay.rtu_id = r_his_coplog_phase.rtu_id  \tAND r_his_coplog_phase.cop_date BETWEEN to_timestamp( '2024-10-11 10:10', 'yyyy-mm-dd hh24:mi:ss' )  \tAND to_timestamp( '2024-10-11 10:15', 'yyyy-mm-dd hh24:mi:ss' )  ORDER BY \tr_his_coplog_phase.cop_date DESC  \tLIMIT 20 "
+    },
+    {
+        "question": "现在/当前亮灯单灯控制器数量",
+        "sql": "SELECT COUNT(DISTINCT l_alonelamp.alone_lamp_control_id) as \"亮灯数量\" FROM \tsl.l_coplog \tJOIN sl.l_alonelamp ON l_alonelamp.alone_lamp_id = l_coplog.alone_lamp_id  WHERE \tl_coplog.is_switch_on > 0 "
+    },
+    {
+        "question": "RTU中各个支路漏电电流",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_coplog_phase.relay_leak_currents AS \"支路漏电电流\", \tr_coplog_phase.cop_date AS \"数据采集时间\"  FROM \tsl.r_rtu \tLEFT JOIN sl.r_coplog_phase ON r_rtu.rtu_id = r_coplog_phase.rtu_id ORDER BY \tr_rtu.rtu_code, \tr_coplog_phase.cop_date "
+    },
+    {
+        "question": "从报表中统计离线单灯数量",
+        "sql": "SELECT COUNT(*) AS \"离线数量\"  FROM \tsl.l_lamp_online_rate_detail  WHERE \tl_lamp_online_rate_detail.report_date = '2024-11-03'  \tAND l_lamp_online_rate_detail.STATE = 1 "
+    },
+    {
+        "question": "rtu下支路的漏电报警阈值",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路ID\", \tr_rturelay.rturelay_name AS \"支路名称\", \tr_rturelay.leakwarn_current AS \"漏电警告阈值\", \tr_rturelay.leakalarm_current AS \"漏电报警阈值\", \tr_rturelay.device_leakalarm_current AS \"设备漏电报警电流阈值\"  FROM \tsl.r_rtu \tJOIN r_rturelay ON r_rtu.rtu_id = r_rturelay.rtu_id  ORDER BY \tr_rtu.rtu_code"
+    },
+    {
+        "question": "查询rtu的日用电量",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_energy_report.read_date_time AS \"读取时间\", \tr_energy_report.start_electric_energy AS \"开始电量\", \tr_energy_report.end_electric_energy AS \"结束电量\", \tr_energy_report.all_electric_energy AS \"总用电量\", \tr_energy_report.report_type AS \"报表类型\" FROM \tsl.r_rtu \tJOIN sl.r_energy_report ON r_rtu.rtu_id = r_energy_report.rtu_id WHERE \tr_energy_report.report_type = 'D'  -- 指定报表类型为日 ORDER BY \tr_energy_report.read_date_time DESC LIMIT 20;"
+    },
+    {
+        "question": "rtu报警记录数",
+        "sql": "SELECT COUNT(*) AS \"报警记录数\"  FROM \tsl.r_his_hitch_alarm  WHERE \tTO_CHAR(last_date, 'YYYY-MM-DD' ) = '2024-11-26' "
+    },
+    {
+        "question": "箱变数量/供电电源数量",
+        "sql": "SELECT COUNT(*) AS \"数量\" FROM sl.r_control_cabinet "
+    },
+    {
+        "question": "rtu下有哪些支路及工作模式",
+        "sql": "SELECT \tr_rtu.rtu_code AS \"RTU编号\", \tr_rtu.rtu_name AS \"RTU名称\", \tr_rturelay.rturelay_id AS \"支路ID\", \tr_rturelay.rturelay_name AS \"支路名称\", \tb_work_model.work_model_name AS \"工作模式名称\"  FROM \tsl.r_rtu \tJOIN sl.r_rturelay ON r_rturelay.rtu_id = r_rtu.rtu_id \tJOIN sl.b_work_model ON b_work_model.work_model_id = r_rturelay.work_model_id  ORDER BY \tr_rtu.rtu_code, \tr_rturelay.rturelay_id "
+    },
+    {
+        "question": "统计今天发生了哪些类型的报警",
+        "sql": "SELECT \tb_hitch_dic.hitch_dic_id AS \"报警类型ID\", \tb_hitch_dic.hitch_name AS \"报警类型\", \tCOUNT (*) AS \"报警数量\"  FROM \tsl.l_his_hitch_alarm \tJOIN sl.b_hitch_dic ON l_his_hitch_alarm.hitch_dic_id = b_hitch_dic.hitch_dic_id  WHERE \tTO_CHAR( l_his_hitch_alarm.alarm_add_date, 'YYYY-MM-DD' ) = TO_CHAR( CURRENT_DATE, 'YYYY-MM-DD' )  GROUP BY \tb_hitch_dic.hitch_dic_id, \tb_hitch_dic.hitch_name  \tLIMIT 20; "
+    },
+    {
+        "question": "巡检计划的巡检设备数量",
+        "sql": "SELECT \tp_check_plan.plan_id AS \"巡检计划ID\", \tp_check_plan.plan_name AS \"巡检计划名称\", \tSUM ( p_check_task.rtu_qty + p_check_task.lampost_qty ) AS \"巡检设备总数\", \tSUM ( p_check_task.rtu_qty ) AS \"巡检RTU数\", \tSUM ( p_check_task.lampost_qty ) AS \"巡检灯杆数\"  FROM \tsl.p_check_plan \tJOIN sl.p_check_task ON p_check_plan.plan_id = p_check_task.plan_id  GROUP BY \tp_check_plan.plan_id, \tp_check_plan.plan_name "
+    }
+]
